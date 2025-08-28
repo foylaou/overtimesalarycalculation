@@ -1,5 +1,66 @@
 import React, { useState, useCallback } from 'react';
-import { Calculator, DollarSign, Clock, Calendar, AlertTriangle, Info } from 'lucide-react';
+import { Calculator, DollarSign, Clock, Calendar, AlertTriangle, Info, Settings, RotateCcw, X } from 'lucide-react';
+
+// 如果你有單獨的 store 檔案，使用這個 import：
+// import { useRateStore, type LaborStandardRates } from './stores/useRateStore';
+
+// 暫時的 Zustand Store 定義（建議移到單獨檔案）
+import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
+
+interface LaborStandardRates {
+  weekdayFirst2hr: number;
+  weekdayNext2hr: number;
+  weekdayEmergency: number;
+  restDayFirst2hr: number;
+  restDay2to8hr: number;
+  restDayOver8hr: number;
+  holidayRate: number;
+  regularDayOffRate: number;
+}
+
+interface RatesState {
+  customRates: LaborStandardRates;
+  useCeilingCalculation: boolean;
+  setCustomRates: (key: keyof LaborStandardRates, value: number) => void;
+  setUseCeilingCalculation: (value: boolean) => void;
+  resetCustomRates: () => void;
+  resetAllSettings: () => void;
+}
+
+const DEFAULT_RATES: LaborStandardRates = {
+  weekdayFirst2hr: 4 / 3,
+  weekdayNext2hr: 5 / 3,
+  weekdayEmergency: 2,
+  restDayFirst2hr: 4 / 3,
+  restDay2to8hr: 5 / 3,
+  restDayOver8hr: 8 / 3,
+  holidayRate: 2,
+  regularDayOffRate: 2,
+};
+
+const useRateStore = create<RatesState>()(
+  persist(
+    (set) => ({
+      customRates: DEFAULT_RATES,
+      useCeilingCalculation: true,
+      setCustomRates: (key, value) => set((state) => ({
+        customRates: { ...state.customRates, [key]: value }
+      })),
+      setUseCeilingCalculation: (value) => set({ useCeilingCalculation: value }),
+      resetCustomRates: () => set({ customRates: DEFAULT_RATES }),
+      resetAllSettings: () => set({
+        customRates: DEFAULT_RATES,
+        useCeilingCalculation: true
+      }),
+    }),
+    {
+      name: "salary-calculator-settings",
+      storage: createJSONStorage(() => localStorage),
+      version: 1,
+    }
+  )
+);
 
 // ===== TypeScript 介面定義 =====
 
@@ -82,19 +143,20 @@ const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
   });
   const [results, setResults] = useState<ComprehensiveResult | null>(null);
   const [showComparison, setShowComparison] = useState<boolean>(false);
-  const [useCeilingCalculation, setUseCeilingCalculation] = useState<boolean>(true);
+  const [showSettings, setShowSettings] = useState<boolean>(false);
 
-  // 勞基法倍率常數
-  const rates: LaborStandardRates = {
-    weekdayFirst2hr: 4/3,    // 平日前2小時：1又1/3倍
-    weekdayNext2hr: 5/3,     // 平日再延長2小時：1又2/3倍
-    weekdayEmergency: 2,     // 天災事變：2倍
-    restDayFirst2hr: 4/3,    // 休息日前2小時：1又1/3倍
-    restDay2to8hr: 5/3,      // 休息日2-8小時：1又2/3倍
-    restDayOver8hr: 8/3,     // 休息日超過8小時：2又2/3倍
-    holidayRate: 2,          // 國定假日、特休：2倍
-    regularDayOffRate: 2     // 例假：2倍
-  };
+  // 使用 Zustand store
+  const {
+    customRates,
+    useCeilingCalculation,
+    setCustomRates: setStoreCustomRates,
+    setUseCeilingCalculation,
+    resetCustomRates,
+    resetAllSettings
+  } = useRateStore();
+
+  // 使用來自 store 的倍率
+  const rates: LaborStandardRates = customRates;
 
   const calculateHourlyRate = useCallback((salary: number, useCeiling: boolean = true): number => {
     // 官方計算方式：月薪給付總額相當於240小時
@@ -396,8 +458,23 @@ const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
     });
     setResults(null);
     setShowComparison(false);
-    // 保持計算方式設定，不重置
+    // Zustand store 的設定會自動保持
   }, []);
+
+  const handleRateChange = useCallback((field: keyof LaborStandardRates, value: string): void => {
+    const numValue = parseFloat(value);
+    if (!isNaN(numValue) && numValue > 0) {
+      setStoreCustomRates(field, numValue);
+    }
+  }, [setStoreCustomRates]);
+
+  const formatRateDisplay = (rate: number): string => {
+    if (rate === 4/3) return '1又1/3倍';
+    if (rate === 5/3) return '1又2/3倍';
+    if (rate === 8/3) return '2又2/3倍';
+    if (rate === 2) return '2倍';
+    return `${rate.toFixed(3)}倍`;
+  };
 
   // 計算薪資比較數據
   const hourlyRateExact = monthlySalary ? calculateHourlyRate(parseFloat(monthlySalary), false) : 0;
@@ -413,7 +490,16 @@ const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
     <div className={`min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 ${className}`}>
       <div className="max-w-4xl mx-auto">
         {/* Header */}
-        <div className="text-center mb-8">
+        <div className="text-center mb-8 relative">
+          {/* 設置按鈕 */}
+          <button
+            onClick={() => setShowSettings(true)}
+            className="absolute top-0 right-0 p-2 text-gray-500 hover:text-indigo-600 hover:bg-white hover:shadow-md rounded-lg transition-all duration-200"
+            title="自訂倍率設定"
+          >
+            <Settings className="w-6 h-6" />
+          </button>
+
           <div className="flex justify-center items-center gap-3 mb-4">
             <Calculator className="w-8 h-8 text-indigo-600" />
             <h1 className="text-3xl font-bold text-gray-800">勞動基準法加班費計算系統</h1>
@@ -752,6 +838,218 @@ const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
           </div>
         )}
 
+        {/* Footer */}
+        <div className="text-center mt-8 text-sm text-gray-500">
+          <p>本計算器依據《勞動基準法》第24條、第32條、第36條、第39條、第40條規定製作</p>
+          <p>計算結果僅供參考，實際薪資以公司規定為準</p>
+        </div>
+
+        {/* 設置 Modal */}
+        {showSettings && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              {/* Modal Header */}
+              <div className="flex justify-between items-center p-6 border-b border-gray-200">
+                <div className="flex items-center gap-2">
+                  <Settings className="w-6 h-6 text-indigo-600" />
+                  <h2 className="text-xl font-bold text-gray-800">自訂倍率設定</h2>
+                </div>
+                <button
+                  onClick={() => setShowSettings(false)}
+                  className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+
+              {/* Modal Content */}
+              <div className="p-6 space-y-6">
+                {/* 持久化狀態提示 */}
+                <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <Settings className="w-4 h-4 text-green-600" />
+                    <span className="text-sm text-green-700 font-medium">
+                      ✓ 設定會自動儲存到瀏覽器，下次使用時會記住您的配置
+                    </span>
+                  </div>
+                </div>
+                {/* 平日加班倍率 */}
+                <div className="space-y-4">
+                  <h3 className="font-semibold text-gray-700 flex items-center gap-2">
+                    <Clock className="w-4 h-4" />
+                    平日加班倍率（勞基法第24條第1項）
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-600 mb-1">
+                        前2小時（{formatRateDisplay(customRates.weekdayFirst2hr)}）
+                      </label>
+                      <input
+                        type="number"
+                        step="0.001"
+                        value={customRates.weekdayFirst2hr.toFixed(3)}
+                        onChange={(e) => handleRateChange('weekdayFirst2hr', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-600 mb-1">
+                        再延長2小時（{formatRateDisplay(customRates.weekdayNext2hr)}）
+                      </label>
+                      <input
+                        type="number"
+                        step="0.001"
+                        value={customRates.weekdayNext2hr.toFixed(3)}
+                        onChange={(e) => handleRateChange('weekdayNext2hr', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-600 mb-1">
+                        天災事變（{formatRateDisplay(customRates.weekdayEmergency)}）
+                      </label>
+                      <input
+                        type="number"
+                        step="0.001"
+                        value={customRates.weekdayEmergency.toFixed(3)}
+                        onChange={(e) => handleRateChange('weekdayEmergency', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 休息日工作倍率 */}
+                <div className="space-y-4">
+                  <h3 className="font-semibold text-gray-700 flex items-center gap-2">
+                    <Calendar className="w-4 h-4" />
+                    休息日工作倍率（勞基法第24條第2項）
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-600 mb-1">
+                        前2小時（{formatRateDisplay(customRates.restDayFirst2hr)}）
+                      </label>
+                      <input
+                        type="number"
+                        step="0.001"
+                        value={customRates.restDayFirst2hr.toFixed(3)}
+                        onChange={(e) => handleRateChange('restDayFirst2hr', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-600 mb-1">
+                        2-8小時（{formatRateDisplay(customRates.restDay2to8hr)}）
+                      </label>
+                      <input
+                        type="number"
+                        step="0.001"
+                        value={customRates.restDay2to8hr.toFixed(3)}
+                        onChange={(e) => handleRateChange('restDay2to8hr', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-600 mb-1">
+                        超過8小時（{formatRateDisplay(customRates.restDayOver8hr)}）
+                      </label>
+                      <input
+                        type="number"
+                        step="0.001"
+                        value={customRates.restDayOver8hr.toFixed(3)}
+                        onChange={(e) => handleRateChange('restDayOver8hr', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 假日出勤倍率 */}
+                <div className="space-y-4">
+                  <h3 className="font-semibold text-gray-700 flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-red-500" />
+                    假日出勤倍率
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-600 mb-1">
+                        國定假日/特休（{formatRateDisplay(customRates.holidayRate)}）
+                      </label>
+                      <input
+                        type="number"
+                        step="0.001"
+                        value={customRates.holidayRate.toFixed(3)}
+                        onChange={(e) => handleRateChange('holidayRate', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-600 mb-1">
+                        例假（{formatRateDisplay(customRates.regularDayOffRate)}）
+                      </label>
+                      <input
+                        type="number"
+                        step="0.001"
+                        value={customRates.regularDayOffRate.toFixed(3)}
+                        onChange={(e) => handleRateChange('regularDayOffRate', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 倍率說明 */}
+                <div className="p-4 bg-blue-50 rounded-lg">
+                  <h4 className="font-semibold text-blue-800 mb-2">倍率說明</h4>
+                  <div className="text-sm text-blue-700 space-y-1">
+                    <p>• <strong>1又1/3倍</strong> = 4/3 ≈ 1.333</p>
+                    <p>• <strong>1又2/3倍</strong> = 5/3 ≈ 1.667</p>
+                    <p>• <strong>2又2/3倍</strong> = 8/3 ≈ 2.667</p>
+                    <p>• <strong>2倍</strong> = 2.000</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="flex justify-between items-center p-6 border-t border-gray-200">
+                <button
+                  onClick={resetCustomRates}
+                  className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors flex items-center gap-2"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  重置為預設值
+                </button>
+                <div className="flex gap-3">
+                  <button
+                    onClick={resetAllSettings}
+                    className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors text-sm"
+                  >
+                    重置全部設定
+                  </button>
+                  <button
+                    onClick={() => setShowSettings(false)}
+                    className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowSettings(false);
+                      // 如果有計算結果，重新計算以使用新倍率
+                      if (results) {
+                        calculateComprehensive();
+                      }
+                    }}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                  >
+                    套用設定
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         {/* Footer */}
         <div className="text-center mt-8 text-sm text-gray-500">
           <p>本計算器依據《勞動基準法》第24條、第32條、第36條、第39條、第40條規定製作</p>
