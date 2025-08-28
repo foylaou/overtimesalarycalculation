@@ -642,7 +642,8 @@ const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
             <ul className="text-sm text-blue-700 space-y-1">
               <li>• <strong>單一時數</strong>：直接輸入數字，例如 <code className="bg-white px-1 rounded">3</code></li>
               <li>• <strong>多天時數</strong>：用逗號分隔，例如 <code className="bg-white px-1 rounded">9,9,9,9</code></li>
-              <li>• <strong>系統特色</strong>：使用無條件進位保護勞工權益，每天分別計算加班費</li>
+              <li>• <strong>本計算方式採用月薪制</strong></li>
+              <li>• <strong>計算方式</strong>：月薪給付總額相當於240小時者,即月薪總額除以30日再除以8小時核計</li>
             </ul>
           </div>
         </div>
@@ -659,7 +660,7 @@ const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
             <div className="bg-gradient-to-r from-green-500 to-emerald-500 text-white p-6 rounded-xl mb-6">
               <div className="text-center">
                 <p className="text-lg opacity-90">總加給工資</p>
-                <p className="text-4xl font-bold">{results.totalPay.toLocaleString()} 元</p>
+               <p className="text-4xl font-bold">{Math.round(results.totalPay).toLocaleString()} 元</p>
                 <p className="text-sm opacity-75 mt-2">
                   計算方式：{useCeilingCalculation ? '無條件進位' : '四捨五入'}
                   {useCeilingCalculation && ' (保護勞工權益)'}
