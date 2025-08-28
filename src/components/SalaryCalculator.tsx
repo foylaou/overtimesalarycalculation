@@ -51,7 +51,7 @@ const SalaryCalculator: React.FC = () => {
     const result = await editDialog({
       cardTitle: "自訂倍率設定",
       initialData: { customRates, useCeilingCalculation },
-      cardStyle:"card bg-base-100 border border-gray-200 shadow-lg max-w-5xl w-full mx-4 max-h-[100vh] overflow-auto",
+      cardStyle:"card bg-base-100 border border-gray-200 shadow-lg max-w-5xl w-full mx-4 max-h-[80vh] overflow-auto",
       renderForm: ({ initialData, onConfirm, onCancel }) => (
         <SettingsForm
           initialData={initialData}
@@ -132,13 +132,13 @@ const SalaryCalculator: React.FC = () => {
   const showCalculationComparison = true;
 
   return (
-<div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 sm:p-6 lg:p-8">
+<div className="min-h-[100dvh] bg-gradient-to-br from-blue-50 to-indigo-100 p-4 sm:p-6 lg:p-8">
   <div className="max-w-4xl mx-auto">
     {/* Header */}
     <div className="text-center mb-8 relative">
       <button
         onClick={handleOpenSettings}
-        className="absolute top-0 right-0 p-2 text-gray-500 hover:text-indigo-600 hover:bg-white hover:shadow-md rounded-lg transition-all duration-200"
+        className=" absolute top-0 right-0 p-2 text-gray-500 hover:text-indigo-600 hover:bg-white hover:shadow-md rounded-lg transition-all duration-200"
         title="自訂倍率設定"
         aria-label="自訂倍率設定"
       >
