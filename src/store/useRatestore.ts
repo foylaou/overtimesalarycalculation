@@ -34,7 +34,7 @@ const DEFAULT_RATES: LaborStandardRates = {
   regularDayOffRate: 2,
 };
 
-// 建立 Zustand Store 並啟用持久化
+// 建立 Zustand store 並啟用持久化
 export const useRateStore = create<RatesState>()(
   persist(
     (set) => ({

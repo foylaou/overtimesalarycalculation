@@ -1,139 +1,13 @@
-import React, { useState, useCallback } from 'react';
-import { Calculator, DollarSign, Clock, Calendar, AlertTriangle, Info, Settings, RotateCcw, X } from 'lucide-react';
+import React, {useCallback, useState} from "react";
+import {AlertTriangle, Calculator, Calendar, Clock, DollarSign, Info, Settings} from "lucide-react";
+import type { ComprehensiveResult, WorkDataInput} from "./type.ts";
+import {DEFAULT_RATES} from "../store/useRatestore.ts";
+import {useEditDialog} from "../hook/useEditDialog.tsx";
+import SettingsForm, {type SettingsFormData} from "./SettingsForm.tsx";
+import { createCustomCalculator} from "../utils/SalaryCalculatorService.ts";
 
-// 如果你有單獨的 store 檔案，使用這個 import：
-// import { useRateStore, type LaborStandardRates } from './stores/useRateStore';
-
-// 暫時的 Zustand Store 定義（建議移到單獨檔案）
-import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
-
-interface LaborStandardRates {
-  weekdayFirst2hr: number;
-  weekdayNext2hr: number;
-  weekdayEmergency: number;
-  restDayFirst2hr: number;
-  restDay2to8hr: number;
-  restDayOver8hr: number;
-  holidayRate: number;
-  regularDayOffRate: number;
-}
-
-interface RatesState {
-  customRates: LaborStandardRates;
-  useCeilingCalculation: boolean;
-  setCustomRates: (key: keyof LaborStandardRates, value: number) => void;
-  setUseCeilingCalculation: (value: boolean) => void;
-  resetCustomRates: () => void;
-  resetAllSettings: () => void;
-}
-
-const DEFAULT_RATES: LaborStandardRates = {
-  weekdayFirst2hr: 4 / 3,
-  weekdayNext2hr: 5 / 3,
-  weekdayEmergency: 2,
-  restDayFirst2hr: 4 / 3,
-  restDay2to8hr: 5 / 3,
-  restDayOver8hr: 8 / 3,
-  holidayRate: 2,
-  regularDayOffRate: 2,
-};
-
-const useRateStore = create<RatesState>()(
-  persist(
-    (set) => ({
-      customRates: DEFAULT_RATES,
-      useCeilingCalculation: true,
-      setCustomRates: (key, value) => set((state) => ({
-        customRates: { ...state.customRates, [key]: value }
-      })),
-      setUseCeilingCalculation: (value) => set({ useCeilingCalculation: value }),
-      resetCustomRates: () => set({ customRates: DEFAULT_RATES }),
-      resetAllSettings: () => set({
-        customRates: DEFAULT_RATES,
-        useCeilingCalculation: true
-      }),
-    }),
-    {
-      name: "salary-calculator-settings",
-      storage: createJSONStorage(() => localStorage),
-      version: 1,
-    }
-  )
-);
-
-// ===== TypeScript 介面定義 =====
-
-/** 工作時數輸入資料 */
-interface WorkDataInput {
-  weekdayOvertime: string;
-  restDayWork: string;
-  holidayWork: string;
-  regularDayOffWork: string;
-  isEmergency: boolean;
-}
-
-/** 解析後的時數資料 */
-interface ParsedHoursData {
-  total: number;
-  detail: number[];
-}
-
-/** 單日工作明細 */
-interface DailyWorkDetail {
-  day: number;
-  hours: number;
-  pay: number;
-}
-
-/** 計算詳細結果 */
-interface CalculationDetail {
-  pay: number;
-  details: string[];
-  dailyBreakdown?: DailyWorkDetail[];
-}
-
-/** 綜合計算結果 */
-interface ComprehensiveResult {
-  hourlyRate: number;
-  dailyWage: number;
-  calculations: {
-    [key in '平日加班' | '休息日工作' | '假日出勤' | '例假出勤']?: CalculationDetail;
-  };
-  totalPay: number;
-}
-
-/** 勞基法規定的加班費倍率 */
-interface LaborStandardRates {
-  weekdayFirst2hr: number;    // 平日前2小時：1又1/3
-  weekdayNext2hr: number;     // 平日再延長2小時：1又2/3
-  weekdayEmergency: number;   // 天災事變：2倍
-  restDayFirst2hr: number;    // 休息日前2小時：1又1/3
-  restDay2to8hr: number;      // 休息日2-8小時：1又2/3
-  restDayOver8hr: number;     // 休息日超過8小時：2又2/3
-  holidayRate: number;        // 國定假日/特休：2倍
-  regularDayOffRate: number;  // 例假：2倍
-}
-
-/** 組件 Props */
-interface SalaryCalculatorProps {
-  defaultMonthlySalary?: number;
-  showCalculationComparison?: boolean;
-  className?: string;
-  onCalculationComplete?: (result: ComprehensiveResult) => void;
-}
-
-// ===== 主要組件 =====
-
-const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
-  defaultMonthlySalary,
-  showCalculationComparison = true,
-  className = '',
-  onCalculationComplete
-}) => {
-  const [monthlySalary, setMonthlySalary] = useState<string>(
-    defaultMonthlySalary ? defaultMonthlySalary.toString() : ''
-  );
+const SalaryCalculator: React.FC = () => {
+  const [monthlySalary, setMonthlySalary] = useState<string>('');
   const [workData, setWorkData] = useState<WorkDataInput>({
     weekdayOvertime: '',
     restDayWork: '',
@@ -143,128 +17,49 @@ const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
   });
   const [results, setResults] = useState<ComprehensiveResult | null>(null);
   const [showComparison, setShowComparison] = useState<boolean>(false);
-  const [showSettings, setShowSettings] = useState<boolean>(false);
 
-  // 使用 Zustand store
-  const {
-    customRates,
-    useCeilingCalculation,
-    setCustomRates: setStoreCustomRates,
-    setUseCeilingCalculation,
-    resetCustomRates,
-    resetAllSettings
-  } = useRateStore();
+  // 使用 React state 管理設定
+  const [settings, setSettings] = useState({
+    customRates: DEFAULT_RATES,
+    useCeilingCalculation: true
+  });
 
-  // 使用來自 store 的倍率
-  const rates: LaborStandardRates = customRates;
 
-  const calculateHourlyRate = useCallback((salary: number, useCeiling: boolean = true): number => {
-    // 官方計算方式：月薪給付總額相當於240小時
-    const hourlyRate = salary / 240;
-    return useCeiling ? Math.ceil(hourlyRate) : Math.round(hourlyRate * 100) / 100;
-  }, []);
+  const useCeilingCalculation = settings.useCeilingCalculation;
 
-  const calculateDailyWage = useCallback((salary: number, useCeiling: boolean = true): number => {
-    // 基於240小時制：240/30 = 8小時/日，所以日薪 = 月薪/30
-    const dailyWage = salary / 30;
-    return useCeiling ? Math.ceil(dailyWage) : Math.round(dailyWage * 100) / 100;
-  }, []);
+  // 創建計算器實例 - 根據設定動態更新
+  const [calculator] = useState(() => createCustomCalculator(settings.customRates));
 
-  const parseHoursInput = useCallback((input: string): ParsedHoursData | null => {
-    if (!input.trim()) return null;
+  // 當設定變更時更新計算器費率
+  React.useEffect(() => {
+    calculator.updateRates(settings.customRates);
+  }, [calculator, settings.customRates]);
 
-    if (input.includes(',')) {
-      const hoursList = input.split(',').map(x => {
-        const parsed = parseFloat(x.trim());
-        if (isNaN(parsed)) throw new Error(`無效的時數: ${x.trim()}`);
-        return parsed;
-      });
-      return { total: hoursList.reduce((sum, h) => sum + h, 0), detail: hoursList };
-    } else {
-      const hours = parseFloat(input.trim());
-      if (isNaN(hours)) throw new Error(`無效的時數: ${input.trim()}`);
-      return { total: hours, detail: [hours] };
+  // 使用 useEditDialog hook
+  const { editDialog, EditComponent } = useEditDialog<SettingsFormData>();
+
+  // 開啟設定對話框
+  const handleOpenSettings = useCallback(async () => {
+    const result = await editDialog({
+      cardTitle: "自訂倍率設定",
+      initialData: settings,
+        cardStyle:"card bg-base-100 border border-gray-200 shadow-lg max-w-5xl w-full mx-4 max-h-[100vh] overflow-auto",
+      renderForm: ({ initialData, onConfirm, onCancel }) => (
+        <SettingsForm
+
+          initialData={initialData}
+          onConfirm={onConfirm}
+          onCancel={onCancel}
+        />
+      )
+    });
+
+    if (result) {
+      setSettings(result);
     }
-  }, []);
+  }, [editDialog, settings]);
 
-  const calculateWeekdayOvertime = useCallback((hours: number, hourlyRate: number, isEmergency: boolean = false): CalculationDetail => {
-    if (hours <= 0) return { pay: 0, details: ['無加班'] };
-
-    let totalPay = 0;
-    const details: string[] = [];
-
-    if (isEmergency) {
-      totalPay = hours * hourlyRate * rates.weekdayEmergency;
-      details.push(`天災事變加班 ${hours} 小時: ${hours} × ${hourlyRate} × ${rates.weekdayEmergency} = ${totalPay.toFixed(2)}`);
-    } else {
-      if (hours <= 2) {
-        totalPay = hours * hourlyRate * rates.weekdayFirst2hr;
-        details.push(`前 ${hours} 小時: ${hours} × ${hourlyRate} × ${rates.weekdayFirst2hr.toFixed(3)} = ${totalPay.toFixed(2)}`);
-      } else if (hours <= 4) {
-        const first2hrPay = 2 * hourlyRate * rates.weekdayFirst2hr;
-        const remainingHours = hours - 2;
-        const remainingPay = remainingHours * hourlyRate * rates.weekdayNext2hr;
-        totalPay = first2hrPay + remainingPay;
-
-        details.push(`前2小時: 2 × ${hourlyRate} × ${rates.weekdayFirst2hr.toFixed(3)} = ${first2hrPay.toFixed(2)}`);
-        details.push(`再延長 ${remainingHours} 小時: ${remainingHours} × ${hourlyRate} × ${rates.weekdayNext2hr.toFixed(3)} = ${remainingPay.toFixed(2)}`);
-      } else {
-        const first2hrPay = 2 * hourlyRate * rates.weekdayFirst2hr;
-        const next2hrPay = 2 * hourlyRate * rates.weekdayNext2hr;
-        const over4hr = hours - 4;
-        const over4hrPay = over4hr * hourlyRate * rates.weekdayNext2hr;
-        totalPay = first2hrPay + next2hrPay + over4hrPay;
-
-        details.push(`前2小時: 2 × ${hourlyRate} × ${rates.weekdayFirst2hr.toFixed(3)} = ${first2hrPay.toFixed(2)}`);
-        details.push(`再延長2小時: 2 × ${hourlyRate} × ${rates.weekdayNext2hr.toFixed(3)} = ${next2hrPay.toFixed(2)}`);
-        details.push(`超過4小時部分 ${over4hr} 小時: ${over4hr} × ${hourlyRate} × ${rates.weekdayNext2hr.toFixed(3)} = ${over4hrPay.toFixed(2)}`);
-      }
-    }
-
-    return { pay: Math.round(totalPay * 100) / 100, details };
-  }, [rates]);
-
-  const calculateRestDayOvertime = useCallback((hours: number, hourlyRate: number): CalculationDetail => {
-    if (hours <= 0) return { pay: 0, details: ['未出勤'] };
-
-    let totalPay = 0;
-    const details: string[] = [];
-
-    if (hours <= 2) {
-      totalPay = hours * hourlyRate * rates.restDayFirst2hr;
-      details.push(`前 ${hours} 小時: ${hours} × ${hourlyRate} × ${rates.restDayFirst2hr.toFixed(3)} = ${totalPay.toFixed(2)}`);
-    } else if (hours <= 8) {
-      const first2hrPay = 2 * hourlyRate * rates.restDayFirst2hr;
-      const remainingHours = hours - 2;
-      const remainingPay = remainingHours * hourlyRate * rates.restDay2to8hr;
-      totalPay = first2hrPay + remainingPay;
-
-      details.push(`前2小時: 2 × ${hourlyRate} × ${rates.restDayFirst2hr.toFixed(3)} = ${first2hrPay.toFixed(2)}`);
-      details.push(`2-8小時 ${remainingHours} 小時: ${remainingHours} × ${hourlyRate} × ${rates.restDay2to8hr.toFixed(3)} = ${remainingPay.toFixed(2)}`);
-    } else {
-      const first2hrPay = 2 * hourlyRate * rates.restDayFirst2hr;
-      const mid6hrPay = 6 * hourlyRate * rates.restDay2to8hr;
-      const over8hr = hours - 8;
-      const over8hrPay = over8hr * hourlyRate * rates.restDayOver8hr;
-      totalPay = first2hrPay + mid6hrPay + over8hrPay;
-
-      details.push(`前2小時: 2 × ${hourlyRate} × ${rates.restDayFirst2hr.toFixed(3)} = ${first2hrPay.toFixed(2)}`);
-      details.push(`2-8小時: 6 × ${hourlyRate} × ${rates.restDay2to8hr.toFixed(3)} = ${mid6hrPay.toFixed(2)}`);
-      details.push(`超過8小時 ${over8hr} 小時: ${over8hr} × ${hourlyRate} × ${rates.restDayOver8hr.toFixed(3)} = ${over8hrPay.toFixed(2)}`);
-    }
-
-    return { pay: Math.round(totalPay * 100) / 100, details };
-  }, [rates]);
-
-  const calculateHolidayPay = useCallback((hours: number, hourlyRate: number, holidayType: string = '國定假日'): CalculationDetail => {
-    if (hours <= 0) return { pay: 0, details: ['未出勤'] };
-
-    const totalPay = hours * hourlyRate * rates.holidayRate;
-    const details = [`${holidayType}出勤 ${hours} 小時: ${hours} × ${hourlyRate} × ${rates.holidayRate} = ${totalPay.toFixed(2)}`];
-
-    return { pay: Math.round(totalPay * 100) / 100, details };
-  }, [rates]);
-
+  // 計算綜合加班費 - 使用封裝的服務
   const calculateComprehensive = useCallback((): void => {
     const salary = parseFloat(monthlySalary);
     if (!salary || salary <= 0) {
@@ -272,181 +67,29 @@ const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
       return;
     }
 
-    const hourlyRate = calculateHourlyRate(salary, useCeilingCalculation);
-    const dailyWage = calculateDailyWage(salary, useCeilingCalculation);
-
-    const calculationResults: ComprehensiveResult = {
-      hourlyRate,
-      dailyWage,
-      calculations: {},
-      totalPay: 0
-    };
-
-    let totalPay = 0;
-
     try {
-      // 平日加班費
-      if (workData.weekdayOvertime.trim()) {
-        const parsed = parseHoursInput(workData.weekdayOvertime);
-        if (parsed) {
-          if (parsed.detail.length > 1) {
-            // 多天計算
-            const dailyResults: DailyWorkDetail[] = parsed.detail.map((dailyHours, index) => {
-              if (dailyHours > 0) {
-                const result = calculateWeekdayOvertime(dailyHours, hourlyRate, workData.isEmergency);
-                return {
-                  day: index + 1,
-                  hours: dailyHours,
-                  pay: result.pay
-                };
-              }
-              return { day: index + 1, hours: 0, pay: 0 };
-            }).filter(item => item.hours > 0);
+      const result = calculator.calculateComprehensive(salary, workData, useCeilingCalculation);
+      setResults(result);
 
-            const dailyTotal = dailyResults.reduce((sum, day) => sum + day.pay, 0);
-            calculationResults.calculations['平日加班'] = {
-              pay: dailyTotal,
-              details: [`共${parsed.detail.length}天，每天分別計算`],
-              dailyBreakdown: dailyResults
-            };
-          } else {
-            // 單日計算
-            const result = calculateWeekdayOvertime(parsed.total, hourlyRate, workData.isEmergency);
-            calculationResults.calculations['平日加班'] = {
-              pay: result.pay,
-              details: result.details
-            };
-          }
-          totalPay += calculationResults.calculations['平日加班']!.pay;
-        }
+      // 顯示工時合規性檢查
+      const validation = calculator.validateWorkHours(workData);
+      if (!validation.isValid && validation.warnings.length > 0) {
+        const warningMessage = validation.warnings.join('\n');
+        // 可以選擇顯示警告，但不阻止計算
+        console.warn('工時檢查警告:', warningMessage);
       }
-
-      // 休息日工作
-      if (workData.restDayWork.trim()) {
-        const parsed = parseHoursInput(workData.restDayWork);
-        if (parsed) {
-          if (parsed.detail.length > 1) {
-            // 多天計算
-            const dailyResults: DailyWorkDetail[] = parsed.detail.map((dailyHours, index) => {
-              if (dailyHours > 0) {
-                const result = calculateRestDayOvertime(dailyHours, hourlyRate);
-                return {
-                  day: index + 1,
-                  hours: dailyHours,
-                  pay: result.pay
-                };
-              }
-              return { day: index + 1, hours: 0, pay: 0 };
-            }).filter(item => item.hours > 0);
-
-            const dailyTotal = dailyResults.reduce((sum, day) => sum + day.pay, 0);
-            calculationResults.calculations['休息日工作'] = {
-              pay: dailyTotal,
-              details: [`共${parsed.detail.length}天，每天分別計算`],
-              dailyBreakdown: dailyResults
-            };
-          } else {
-            // 單日計算
-            const result = calculateRestDayOvertime(parsed.total, hourlyRate);
-            calculationResults.calculations['休息日工作'] = {
-              pay: result.pay,
-              details: result.details
-            };
-          }
-          totalPay += calculationResults.calculations['休息日工作']!.pay;
-        }
-      }
-
-      // 國定假日/特休出勤
-      if (workData.holidayWork.trim()) {
-        const parsed = parseHoursInput(workData.holidayWork);
-        if (parsed) {
-          if (parsed.detail.length > 1) {
-            // 多天計算
-            const dailyResults: DailyWorkDetail[] = parsed.detail.map((dailyHours, index) => {
-              if (dailyHours > 0) {
-                const result = calculateHolidayPay(dailyHours, hourlyRate, '國定假日');
-                return {
-                  day: index + 1,
-                  hours: dailyHours,
-                  pay: result.pay
-                };
-              }
-              return { day: index + 1, hours: 0, pay: 0 };
-            }).filter(item => item.hours > 0);
-
-            const dailyTotal = dailyResults.reduce((sum, day) => sum + day.pay, 0);
-            calculationResults.calculations['假日出勤'] = {
-              pay: dailyTotal,
-              details: [`共${parsed.detail.length}天，每天分別計算`],
-              dailyBreakdown: dailyResults
-            };
-          } else {
-            // 單日計算
-            const result = calculateHolidayPay(parsed.total, hourlyRate, '國定假日');
-            calculationResults.calculations['假日出勤'] = {
-              pay: result.pay,
-              details: result.details
-            };
-          }
-          totalPay += calculationResults.calculations['假日出勤']!.pay;
-        }
-      }
-
-      // 例假出勤
-      if (workData.regularDayOffWork.trim()) {
-        const parsed = parseHoursInput(workData.regularDayOffWork);
-        if (parsed) {
-          if (parsed.detail.length > 1) {
-            // 多天計算
-            const dailyResults: DailyWorkDetail[] = parsed.detail.map((dailyHours, index) => {
-              if (dailyHours > 0) {
-                const result = calculateHolidayPay(dailyHours, hourlyRate, '例假');
-                return {
-                  day: index + 1,
-                  hours: dailyHours,
-                  pay: result.pay
-                };
-              }
-              return { day: index + 1, hours: 0, pay: 0 };
-            }).filter(item => item.hours > 0);
-
-            const dailyTotal = dailyResults.reduce((sum, day) => sum + day.pay, 0);
-            calculationResults.calculations['例假出勤'] = {
-              pay: dailyTotal,
-              details: [`共${parsed.detail.length}天，每天分別計算`],
-              dailyBreakdown: dailyResults
-            };
-          } else {
-            // 單日計算
-            const result = calculateHolidayPay(parsed.total, hourlyRate, '例假');
-            calculationResults.calculations['例假出勤'] = {
-              pay: result.pay,
-              details: result.details
-            };
-          }
-          totalPay += calculationResults.calculations['例假出勤']!.pay;
-        }
-      }
-
-      calculationResults.totalPay = Math.round(totalPay * 100) / 100;
-      setResults(calculationResults);
-
-      // 回調函數
-      if (onCalculationComplete) {
-        onCalculationComplete(calculationResults);
-      }
-
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '輸入格式錯誤';
-      alert(`${errorMessage}\n\n請確認輸入格式：\n• 單一時數: 3\n• 多天時數: 9,9,9,9`);
+      const errorMessage = error instanceof Error ? error.message : '計算發生錯誤';
+      alert(errorMessage);
     }
-  }, [monthlySalary, workData, rates, calculateHourlyRate, calculateDailyWage, parseHoursInput, calculateWeekdayOvertime, calculateRestDayOvertime, calculateHolidayPay, onCalculationComplete]);
+  }, [calculator, monthlySalary, workData, useCeilingCalculation]);
 
+  // 處理輸入變更
   const handleInputChange = useCallback((field: keyof WorkDataInput, value: string | boolean): void => {
     setWorkData(prev => ({ ...prev, [field]: value }));
   }, []);
 
+  // 重置表單
   const resetForm = useCallback((): void => {
     setMonthlySalary('');
     setWorkData({
@@ -458,42 +101,27 @@ const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
     });
     setResults(null);
     setShowComparison(false);
-    // Zustand store 的設定會自動保持
   }, []);
 
-  const handleRateChange = useCallback((field: keyof LaborStandardRates, value: string): void => {
-    const numValue = parseFloat(value);
-    if (!isNaN(numValue) && numValue > 0) {
-      setStoreCustomRates(field, numValue);
-    }
-  }, [setStoreCustomRates]);
+  // 計算薪資比較數據 - 使用計算器服務
+  const hourlyRateExact = monthlySalary ? calculator.calculateHourlyRate(parseFloat(monthlySalary), false) : 0;
+  const hourlyRateCeiling = monthlySalary ? calculator.calculateHourlyRate(parseFloat(monthlySalary), true) : 0;
+  const dailyWageExact = monthlySalary ? calculator.calculateDailyWage(parseFloat(monthlySalary), false) : 0;
+  const dailyWageCeiling = monthlySalary ? calculator.calculateDailyWage(parseFloat(monthlySalary), true) : 0;
 
-  const formatRateDisplay = (rate: number): string => {
-    if (rate === 4/3) return '1又1/3倍';
-    if (rate === 5/3) return '1又2/3倍';
-    if (rate === 8/3) return '2又2/3倍';
-    if (rate === 2) return '2倍';
-    return `${rate.toFixed(3)}倍`;
-  };
+  const currentHourlyRate = monthlySalary ? calculator.calculateHourlyRate(parseFloat(monthlySalary), useCeilingCalculation) : 0;
+  const currentDailyWage = monthlySalary ? calculator.calculateDailyWage(parseFloat(monthlySalary), useCeilingCalculation) : 0;
 
-  // 計算薪資比較數據
-  const hourlyRateExact = monthlySalary ? calculateHourlyRate(parseFloat(monthlySalary), false) : 0;
-  const hourlyRateCeiling = monthlySalary ? calculateHourlyRate(parseFloat(monthlySalary), true) : 0;
-  const dailyWageExact = monthlySalary ? calculateDailyWage(parseFloat(monthlySalary), false) : 0;
-  const dailyWageCeiling = monthlySalary ? calculateDailyWage(parseFloat(monthlySalary), true) : 0;
-
-  // 當前使用的薪資（根據開關狀態）
-  const currentHourlyRate = monthlySalary ? calculateHourlyRate(parseFloat(monthlySalary), useCeilingCalculation) : 0;
-  const currentDailyWage = monthlySalary ? calculateDailyWage(parseFloat(monthlySalary), useCeilingCalculation) : 0;
+  // 檢查是否要顯示計算比較 - 假設這是一個 prop 或設定
+  const showCalculationComparison = true;
 
   return (
-    <div className={`min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 ${className}`}>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8 relative">
-          {/* 設置按鈕 */}
           <button
-            onClick={() => setShowSettings(true)}
+            onClick={handleOpenSettings}
             className="absolute top-0 right-0 p-2 text-gray-500 hover:text-indigo-600 hover:bg-white hover:shadow-md rounded-lg transition-all duration-200"
             title="自訂倍率設定"
           >
@@ -543,7 +171,10 @@ const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
                   四捨五入
                 </span>
                 <button
-                  onClick={() => setUseCeilingCalculation(!useCeilingCalculation)}
+                  onClick={() => setSettings(prev => ({
+                    ...prev,
+                    useCeilingCalculation: !prev.useCeilingCalculation
+                  }))}
                   className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:ring-offset-2 ${
                     useCeilingCalculation ? 'bg-indigo-600' : 'bg-gray-200'
                   }`}
@@ -728,7 +359,6 @@ const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
             <ul className="text-sm text-blue-700 space-y-1">
               <li>• <strong>單一時數</strong>：直接輸入數字，例如 <code className="bg-white px-1 rounded">3</code></li>
               <li>• <strong>多天時數</strong>：用逗號分隔，例如 <code className="bg-white px-1 rounded">9,9,9,9</code></li>
-              <li>• <strong>系統特色</strong>：使用無條件進位保護勞工權益，每天分別計算加班費</li>
             </ul>
           </div>
         </div>
@@ -810,22 +440,23 @@ const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
               </div>
             )}
 
-            {/* 法規提醒 */}
+            {/* 法規提醒 - 使用計算器的合規性檢查 */}
             <div className="mt-6 p-4 bg-red-50 border-l-4 border-red-400 rounded">
               <div className="flex items-start gap-2">
                 <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
                 <div className="text-sm">
                   <h4 className="font-semibold text-red-800 mb-2">工時限制檢查</h4>
-                  {Object.entries(results.calculations).some(([, calc]) =>
-                    calc?.dailyBreakdown?.some(day => day.hours > 4) ||
-                    (!calc?.dailyBreakdown && Object.values(workData).some(data =>
-                      typeof data === 'string' && data.trim() && parseFloat(data.split(',')[0] || data) > 4
-                    ))
-                  ) && (
-                    <div className="bg-red-100 p-2 rounded mb-2">
-                      <p className="text-red-700 font-medium">⚠️ 注意：部分工作時數可能超過建議上限</p>
-                    </div>
-                  )}
+                  {(() => {
+                    const validation = calculator.validateWorkHours(workData);
+                    return validation.warnings.length > 0 ? (
+                      <div className="bg-red-100 p-2 rounded mb-2">
+                        <p className="text-red-700 font-medium">⚠️ 注意：</p>
+                        {validation.warnings.map((warning, index) => (
+                          <p key={index} className="text-red-700 text-xs mt-1">• {warning}</p>
+                        ))}
+                      </div>
+                    ) : null;
+                  })()}
                   <ul className="text-red-700 space-y-1">
                     <li>• 每日工作時間（含加班）不得超過12小時</li>
                     <li>• 每月延長工作時間不得超過46小時（經同意後不得超過54小時）</li>
@@ -838,218 +469,9 @@ const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
           </div>
         )}
 
-        {/* Footer */}
-        <div className="text-center mt-8 text-sm text-gray-500">
-          <p>本計算器依據《勞動基準法》第24條、第32條、第36條、第39條、第40條規定製作</p>
-          <p>計算結果僅供參考，實際薪資以公司規定為準</p>
-        </div>
+        {/* EditDialog Component */}
+        {EditComponent}
 
-        {/* 設置 Modal */}
-        {showSettings && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-              {/* Modal Header */}
-              <div className="flex justify-between items-center p-6 border-b border-gray-200">
-                <div className="flex items-center gap-2">
-                  <Settings className="w-6 h-6 text-indigo-600" />
-                  <h2 className="text-xl font-bold text-gray-800">自訂倍率設定</h2>
-                </div>
-                <button
-                  onClick={() => setShowSettings(false)}
-                  className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <X className="w-5 h-5 text-gray-500" />
-                </button>
-              </div>
-
-              {/* Modal Content */}
-              <div className="p-6 space-y-6">
-                {/* 持久化狀態提示 */}
-                <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                  <div className="flex items-center gap-2">
-                    <Settings className="w-4 h-4 text-green-600" />
-                    <span className="text-sm text-green-700 font-medium">
-                      ✓ 設定會自動儲存到瀏覽器，下次使用時會記住您的配置
-                    </span>
-                  </div>
-                </div>
-                {/* 平日加班倍率 */}
-                <div className="space-y-4">
-                  <h3 className="font-semibold text-gray-700 flex items-center gap-2">
-                    <Clock className="w-4 h-4" />
-                    平日加班倍率（勞基法第24條第1項）
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-600 mb-1">
-                        前2小時（{formatRateDisplay(customRates.weekdayFirst2hr)}）
-                      </label>
-                      <input
-                        type="number"
-                        step="0.001"
-                        value={customRates.weekdayFirst2hr.toFixed(3)}
-                        onChange={(e) => handleRateChange('weekdayFirst2hr', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-600 mb-1">
-                        再延長2小時（{formatRateDisplay(customRates.weekdayNext2hr)}）
-                      </label>
-                      <input
-                        type="number"
-                        step="0.001"
-                        value={customRates.weekdayNext2hr.toFixed(3)}
-                        onChange={(e) => handleRateChange('weekdayNext2hr', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-600 mb-1">
-                        天災事變（{formatRateDisplay(customRates.weekdayEmergency)}）
-                      </label>
-                      <input
-                        type="number"
-                        step="0.001"
-                        value={customRates.weekdayEmergency.toFixed(3)}
-                        onChange={(e) => handleRateChange('weekdayEmergency', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* 休息日工作倍率 */}
-                <div className="space-y-4">
-                  <h3 className="font-semibold text-gray-700 flex items-center gap-2">
-                    <Calendar className="w-4 h-4" />
-                    休息日工作倍率（勞基法第24條第2項）
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-600 mb-1">
-                        前2小時（{formatRateDisplay(customRates.restDayFirst2hr)}）
-                      </label>
-                      <input
-                        type="number"
-                        step="0.001"
-                        value={customRates.restDayFirst2hr.toFixed(3)}
-                        onChange={(e) => handleRateChange('restDayFirst2hr', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-600 mb-1">
-                        2-8小時（{formatRateDisplay(customRates.restDay2to8hr)}）
-                      </label>
-                      <input
-                        type="number"
-                        step="0.001"
-                        value={customRates.restDay2to8hr.toFixed(3)}
-                        onChange={(e) => handleRateChange('restDay2to8hr', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-600 mb-1">
-                        超過8小時（{formatRateDisplay(customRates.restDayOver8hr)}）
-                      </label>
-                      <input
-                        type="number"
-                        step="0.001"
-                        value={customRates.restDayOver8hr.toFixed(3)}
-                        onChange={(e) => handleRateChange('restDayOver8hr', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* 假日出勤倍率 */}
-                <div className="space-y-4">
-                  <h3 className="font-semibold text-gray-700 flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-red-500" />
-                    假日出勤倍率
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-600 mb-1">
-                        國定假日/特休（{formatRateDisplay(customRates.holidayRate)}）
-                      </label>
-                      <input
-                        type="number"
-                        step="0.001"
-                        value={customRates.holidayRate.toFixed(3)}
-                        onChange={(e) => handleRateChange('holidayRate', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-600 mb-1">
-                        例假（{formatRateDisplay(customRates.regularDayOffRate)}）
-                      </label>
-                      <input
-                        type="number"
-                        step="0.001"
-                        value={customRates.regularDayOffRate.toFixed(3)}
-                        onChange={(e) => handleRateChange('regularDayOffRate', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* 倍率說明 */}
-                <div className="p-4 bg-blue-50 rounded-lg">
-                  <h4 className="font-semibold text-blue-800 mb-2">倍率說明</h4>
-                  <div className="text-sm text-blue-700 space-y-1">
-                    <p>• <strong>1又1/3倍</strong> = 4/3 ≈ 1.333</p>
-                    <p>• <strong>1又2/3倍</strong> = 5/3 ≈ 1.667</p>
-                    <p>• <strong>2又2/3倍</strong> = 8/3 ≈ 2.667</p>
-                    <p>• <strong>2倍</strong> = 2.000</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Modal Footer */}
-              <div className="flex justify-between items-center p-6 border-t border-gray-200">
-                <button
-                  onClick={resetCustomRates}
-                  className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors flex items-center gap-2"
-                >
-                  <RotateCcw className="w-4 h-4" />
-                  重置為預設值
-                </button>
-                <div className="flex gap-3">
-                  <button
-                    onClick={resetAllSettings}
-                    className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors text-sm"
-                  >
-                    重置全部設定
-                  </button>
-                  <button
-                    onClick={() => setShowSettings(false)}
-                    className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
-                  >
-                    取消
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowSettings(false);
-                      // 如果有計算結果，重新計算以使用新倍率
-                      if (results) {
-                        calculateComprehensive();
-                      }
-                    }}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                  >
-                    套用設定
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
         {/* Footer */}
         <div className="text-center mt-8 text-sm text-gray-500">
           <p>本計算器依據《勞動基準法》第24條、第32條、第36條、第39條、第40條規定製作</p>
