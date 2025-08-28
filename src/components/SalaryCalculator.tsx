@@ -659,7 +659,7 @@ const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
             <div className="bg-gradient-to-r from-green-500 to-emerald-500 text-white p-6 rounded-xl mb-6">
               <div className="text-center">
                 <p className="text-lg opacity-90">總加給工資</p>
-                <p className="text-4xl font-bold">{results.totalPay.toLocaleString()} 元</p>
+                <p className="text-4xl font-bold">{Math.round(results.totalPay).toLocaleString()} 元</p>
                 <p className="text-sm opacity-75 mt-2">
                   計算方式：{useCeilingCalculation ? '無條件進位' : '四捨五入'}
                   {useCeilingCalculation && ' (保護勞工權益)'}
