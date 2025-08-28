@@ -82,6 +82,7 @@ const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
   });
   const [results, setResults] = useState<ComprehensiveResult | null>(null);
   const [showComparison, setShowComparison] = useState<boolean>(false);
+  const [useCeilingCalculation, setUseCeilingCalculation] = useState<boolean>(true);
 
   // 勞基法倍率常數
   const rates: LaborStandardRates = {
@@ -96,11 +97,13 @@ const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
   };
 
   const calculateHourlyRate = useCallback((salary: number, useCeiling: boolean = true): number => {
-    const hourlyRate = salary / 30 / 8;
+    // 官方計算方式：月薪給付總額相當於240小時
+    const hourlyRate = salary / 240;
     return useCeiling ? Math.ceil(hourlyRate) : Math.round(hourlyRate * 100) / 100;
   }, []);
 
   const calculateDailyWage = useCallback((salary: number, useCeiling: boolean = true): number => {
+    // 基於240小時制：240/30 = 8小時/日，所以日薪 = 月薪/30
     const dailyWage = salary / 30;
     return useCeiling ? Math.ceil(dailyWage) : Math.round(dailyWage * 100) / 100;
   }, []);
@@ -207,8 +210,8 @@ const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
       return;
     }
 
-    const hourlyRate = calculateHourlyRate(salary, true);
-    const dailyWage = calculateDailyWage(salary, true);
+    const hourlyRate = calculateHourlyRate(salary, useCeilingCalculation);
+    const dailyWage = calculateDailyWage(salary, useCeilingCalculation);
 
     const calculationResults: ComprehensiveResult = {
       hourlyRate,
@@ -393,6 +396,7 @@ const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
     });
     setResults(null);
     setShowComparison(false);
+    // 保持計算方式設定，不重置
   }, []);
 
   // 計算薪資比較數據
@@ -400,6 +404,10 @@ const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
   const hourlyRateCeiling = monthlySalary ? calculateHourlyRate(parseFloat(monthlySalary), true) : 0;
   const dailyWageExact = monthlySalary ? calculateDailyWage(parseFloat(monthlySalary), false) : 0;
   const dailyWageCeiling = monthlySalary ? calculateDailyWage(parseFloat(monthlySalary), true) : 0;
+
+  // 當前使用的薪資（根據開關狀態）
+  const currentHourlyRate = monthlySalary ? calculateHourlyRate(parseFloat(monthlySalary), useCeilingCalculation) : 0;
+  const currentDailyWage = monthlySalary ? calculateDailyWage(parseFloat(monthlySalary), useCeilingCalculation) : 0;
 
   return (
     <div className={`min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 ${className}`}>
@@ -433,6 +441,56 @@ const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
             </div>
           </div>
 
+          {/* 計算方式開關 */}
+          <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Calculator className="w-5 h-5 text-amber-600" />
+                <div>
+                  <h3 className="font-semibold text-gray-700">計算方式設定</h3>
+                  <p className="text-sm text-gray-600">選擇薪資計算方式（影響加班費計算）</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span className={`text-sm font-medium ${!useCeilingCalculation ? 'text-gray-900' : 'text-gray-500'}`}>
+                  四捨五入
+                </span>
+                <button
+                  onClick={() => setUseCeilingCalculation(!useCeilingCalculation)}
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:ring-offset-2 ${
+                    useCeilingCalculation ? 'bg-indigo-600' : 'bg-gray-200'
+                  }`}
+                  role="switch"
+                  aria-checked={useCeilingCalculation}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition duration-200 ease-in-out ${
+                      useCeilingCalculation ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+                <span className={`text-sm font-medium ${useCeilingCalculation ? 'text-gray-900' : 'text-gray-500'}`}>
+                  無條件進位
+                </span>
+              </div>
+            </div>
+
+            {monthlySalary && (
+              <div className="mt-3 pt-3 border-t border-amber-200">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">當前時薪:</span>
+                  <span className="font-bold text-amber-700">{currentHourlyRate} 元</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">當前日薪:</span>
+                  <span className="font-bold text-amber-700">{currentDailyWage} 元</span>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* 薪資比較 */}
           {monthlySalary && showCalculationComparison && (
             <div className="mb-6 p-4 bg-gray-50 rounded-lg">
@@ -446,18 +504,36 @@ const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-indigo-50 p-3 rounded">
-                  <p className="text-sm text-gray-600">無條件進位（系統預設）</p>
-                  <p className="font-bold text-indigo-700">時薪: {hourlyRateCeiling} 元</p>
-                  <p className="font-bold text-indigo-700">日薪: {dailyWageCeiling} 元</p>
+              <div className="grid grid-cols-1 gap-4">
+                <div className={`p-3 rounded transition-all duration-200 ${
+                  useCeilingCalculation 
+                    ? 'bg-indigo-50 border-2 border-indigo-200' 
+                    : 'bg-gray-100 border border-gray-200'
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600">
+                        {useCeilingCalculation ? '✓ 使用中' : '未使用'} - 無條件進位
+                      </p>
+                      <p className="font-bold text-indigo-700">時薪: {hourlyRateCeiling} 元 | 日薪: {dailyWageCeiling} 元</p>
+                    </div>
+                  </div>
                 </div>
 
                 {showComparison && (
-                  <div className="bg-gray-100 p-3 rounded">
-                    <p className="text-sm text-gray-600">四捨五入</p>
-                    <p className="font-medium text-gray-700">時薪: {hourlyRateExact.toFixed(2)} 元</p>
-                    <p className="font-medium text-gray-700">日薪: {dailyWageExact.toFixed(2)} 元</p>
+                  <div className={`p-3 rounded transition-all duration-200 ${
+                    !useCeilingCalculation 
+                      ? 'bg-indigo-50 border-2 border-indigo-200' 
+                      : 'bg-gray-100 border border-gray-200'
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600">
+                          {!useCeilingCalculation ? '✓ 使用中' : '未使用'} - 四捨五入
+                        </p>
+                        <p className="font-medium text-gray-700">時薪: {hourlyRateExact.toFixed(2)} 元 | 日薪: {dailyWageExact.toFixed(2)} 元</p>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -584,7 +660,10 @@ const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
               <div className="text-center">
                 <p className="text-lg opacity-90">總加給工資</p>
                 <p className="text-4xl font-bold">{results.totalPay.toLocaleString()} 元</p>
-                <p className="text-sm opacity-75 mt-2">計算方式：無條件進位（保護勞工權益）</p>
+                <p className="text-sm opacity-75 mt-2">
+                  計算方式：{useCeilingCalculation ? '無條件進位' : '四捨五入'}
+                  {useCeilingCalculation && ' (保護勞工權益)'}
+                </p>
               </div>
             </div>
 

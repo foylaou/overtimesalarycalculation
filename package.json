@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "homepage": "https://foylaou.github.io/overtime-salary-calculation",
+  "homepage": "https://foylaou.github.io/overtimesalarycalculation",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
