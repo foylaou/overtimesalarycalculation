@@ -52,6 +52,7 @@ const SettingsForm: React.FC<SettingsFormProps> = ({
   initialData,
   onConfirm,
   onCancel,
+
 }) => {
   const [formData, setFormData] = useState<SettingsFormData>(() => ({
     customRates: initialData?.customRates || DEFAULT_RATES,
