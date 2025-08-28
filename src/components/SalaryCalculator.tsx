@@ -136,14 +136,6 @@ const SalaryCalculator: React.FC = () => {
         <div className="max-w-4xl mx-auto">
           {/* Header */}
           <div className="text-center mb-8 relative">
-            <button
-                onClick={handleOpenSettings}
-                className="absolute top-0 right-0 btn btn-ghost btn-sm"
-                title="自訂倍率設定"
-                aria-label="自訂倍率設定"
-            >
-              <Settings className="w-4 h-4"/>
-            </button>
             <div className="flex flex-col items-center gap-2 mb-4">
               <div className="flex justify-center items-center gap-3">
                 <Calculator className="w-8 h-8 text-primary"/>
