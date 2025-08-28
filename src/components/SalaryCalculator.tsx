@@ -642,8 +642,7 @@ const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
             <ul className="text-sm text-blue-700 space-y-1">
               <li>• <strong>單一時數</strong>：直接輸入數字，例如 <code className="bg-white px-1 rounded">3</code></li>
               <li>• <strong>多天時數</strong>：用逗號分隔，例如 <code className="bg-white px-1 rounded">9,9,9,9</code></li>
-              <li>• <strong>本計算方式採用月薪制</strong></li>
-              <li>• <strong>計算方式</strong>：月薪給付總額相當於240小時者,即月薪總額除以30日再除以8小時核計</li>
+              <li>• <strong>系統特色</strong>：使用無條件進位保護勞工權益，每天分別計算加班費</li>
             </ul>
           </div>
         </div>
@@ -660,7 +659,7 @@ const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
             <div className="bg-gradient-to-r from-green-500 to-emerald-500 text-white p-6 rounded-xl mb-6">
               <div className="text-center">
                 <p className="text-lg opacity-90">總加給工資</p>
-               <p className="text-4xl font-bold">{Math.round(results.totalPay).toLocaleString()} 元</p>
+                <p className="text-4xl font-bold">{results.totalPay.toLocaleString()} 元</p>
                 <p className="text-sm opacity-75 mt-2">
                   計算方式：{useCeilingCalculation ? '無條件進位' : '四捨五入'}
                   {useCeilingCalculation && ' (保護勞工權益)'}
@@ -726,12 +725,22 @@ const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
             )}
 
             {/* 法規提醒 */}
-            <div className="mt-6 p-4 bg-yellow-50 border-l-4 border-yellow-400 rounded">
+            <div className="mt-6 p-4 bg-red-50 border-l-4 border-red-400 rounded">
               <div className="flex items-start gap-2">
-                <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+                <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
                 <div className="text-sm">
-                  <h4 className="font-semibold text-yellow-800 mb-1">法規提醒</h4>
-                  <ul className="text-yellow-700 space-y-1">
+                  <h4 className="font-semibold text-red-800 mb-2">工時限制檢查</h4>
+                  {Object.entries(results.calculations).some(([, calc]) =>
+                    calc?.dailyBreakdown?.some(day => day.hours > 4) ||
+                    (!calc?.dailyBreakdown && Object.values(workData).some(data =>
+                      typeof data === 'string' && data.trim() && parseFloat(data.split(',')[0] || data) > 4
+                    ))
+                  ) && (
+                    <div className="bg-red-100 p-2 rounded mb-2">
+                      <p className="text-red-700 font-medium">⚠️ 注意：部分工作時數可能超過建議上限</p>
+                    </div>
+                  )}
+                  <ul className="text-red-700 space-y-1">
                     <li>• 每日工作時間（含加班）不得超過12小時</li>
                     <li>• 每月延長工作時間不得超過46小時（經同意後不得超過54小時）</li>
                     <li>• 每3個月延長工作時間不得超過138小時</li>
