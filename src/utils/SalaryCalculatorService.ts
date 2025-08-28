@@ -182,11 +182,11 @@ export class SalaryCalculatorService {
   }
 
   // 處理多天計算的私有方法
-  private processDailyCalculation(
+  private processDailyCalculation<T extends unknown[]>(
     parsedData: ParsedHoursData,
     hourlyRate: number,
-    calculationMethod: (hours: number, hourlyRate: number, ...args: any[]) => CalculationDetail,
-    ...additionalArgs: any[]
+    calculationMethod: (hours: number, hourlyRate: number, ...args: T) => CalculationDetail,
+    ...additionalArgs: T
   ): CalculationDetail {
     if (parsedData.detail.length > 1) {
       // 多天計算
@@ -327,7 +327,7 @@ export class SalaryCalculatorService {
           }
         }
       } catch (error) {
-        warnings.push(`${type}輸入格式錯誤`);
+        warnings.push(`${type}輸入格式錯誤 ${error}`);
         isValid = false;
       }
     };

@@ -1,7 +1,7 @@
-import React, {useCallback, useState} from "react";
+import React, {useCallback, useEffect, useState} from "react";
 import {AlertTriangle, Calculator, Calendar, Clock, DollarSign, Info, Settings} from "lucide-react";
 import type { ComprehensiveResult, WorkDataInput} from "./type.ts";
-import {DEFAULT_RATES} from "../store/useRatestore.ts";
+import {DEFAULT_RATES, useRateStore} from "../store/useRatestore.ts";
 import {useEditDialog} from "../hook/useEditDialog.tsx";
 import SettingsForm, {type SettingsFormData} from "./SettingsForm.tsx";
 import { createCustomCalculator} from "../utils/SalaryCalculatorService.ts";
@@ -18,22 +18,27 @@ const SalaryCalculator: React.FC = () => {
   const [results, setResults] = useState<ComprehensiveResult | null>(null);
   const [showComparison, setShowComparison] = useState<boolean>(false);
 
+
   // 使用 React state 管理設定
-  const [settings, setSettings] = useState({
+  const [, setSettings] = useState({
     customRates: DEFAULT_RATES,
     useCeilingCalculation: true
   });
+  // 從 Zustand Store 中取出狀態和動作
+  const { customRates, setCustomRates } = useRateStore();
 
+  // 使用 React state 管理計算方式
+  const [useCeilingCalculation, setUseCeilingCalculation] = useState<boolean>(true);
 
-  const useCeilingCalculation = settings.useCeilingCalculation;
 
   // 創建計算器實例 - 根據設定動態更新
-  const [calculator] = useState(() => createCustomCalculator(settings.customRates));
+  const [calculator] = useState(() => createCustomCalculator(customRates));
 
-  // 當設定變更時更新計算器費率
-  React.useEffect(() => {
-    calculator.updateRates(settings.customRates);
-  }, [calculator, settings.customRates]);
+  useEffect(() => {
+    calculator.updateRates(customRates);
+  }, [calculator, customRates]);
+
+
 
   // 使用 useEditDialog hook
   const { editDialog, EditComponent } = useEditDialog<SettingsFormData>();
@@ -42,11 +47,10 @@ const SalaryCalculator: React.FC = () => {
   const handleOpenSettings = useCallback(async () => {
     const result = await editDialog({
       cardTitle: "自訂倍率設定",
-      initialData: settings,
-        cardStyle:"card bg-base-100 border border-gray-200 shadow-lg max-w-5xl w-full mx-4 max-h-[100vh] overflow-auto",
+      initialData: { customRates, useCeilingCalculation },
+      cardStyle:"card bg-base-100 border border-gray-200 shadow-lg max-w-5xl w-full mx-4 max-h-[100vh] overflow-auto",
       renderForm: ({ initialData, onConfirm, onCancel }) => (
         <SettingsForm
-
           initialData={initialData}
           onConfirm={onConfirm}
           onCancel={onCancel}
@@ -55,9 +59,13 @@ const SalaryCalculator: React.FC = () => {
     });
 
     if (result) {
-      setSettings(result);
+        // 更新 Zustand store 中的 customRates
+        Object.keys(result.customRates).forEach(key => {
+            setCustomRates(key as keyof typeof result.customRates, result.customRates[key as keyof typeof result.customRates]);
+        });
+      setUseCeilingCalculation(result.useCeilingCalculation);
     }
-  }, [editDialog, settings]);
+  }, [editDialog, customRates, useCeilingCalculation, setCustomRates]);
 
   // 計算綜合加班費 - 使用封裝的服務
   const calculateComprehensive = useCallback((): void => {
